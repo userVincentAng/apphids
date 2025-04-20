@@ -13,7 +13,7 @@ class MyApp extends StatelessWidget {
       title: 'APP-HIDS',
       theme: AppTheme.darkTheme,
       debugShowCheckedModeBanner: false,
-      home: const DashboardPage(), // Initial screen
+      home: DashboardPage(), // Initial screen
     );
   }
 }
