@@ -11,75 +11,18 @@ class DashboardPage extends StatelessWidget {
   void showDetectionAlert(BuildContext context) {
     showDialog(
       context: context,
-      barrierDismissible: false, // Don't allow dismissing by tapping outside
       builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: EdgeInsets.zero,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: double.infinity,
-                height: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(0),
-                ),
-              ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'DETECTION ALERT!',
-                    style: TextStyle(
-                      fontSize: 28,
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  // Bug icon in red glow
-                  Container(
-                    padding: const EdgeInsets.all(40),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          Colors.redAccent.withOpacity(0.9),
-                          Colors.red.withOpacity(0.6),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.3, 0.6, 1.0],
-                      ),
-                    ),
-                    child: Image.asset(
-                      'assets/icons/app_icon.png',
-                      width: 80,
-                      height: 80,
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context); // Close dialog
-                      // Navigate to detection result page or show bottom sheet
-                    },
-                    child: const Text(
-                      'Show Detection Result',
-                      style: TextStyle(
-                        color: Colors.yellowAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+        return AlertDialog(
+          title: const Text('Detection Alert'),
+          content: const Text('A new pest has been detected!'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Dismiss the dialog
+              },
+              child: const Text('OK'),
+            ),
+          ],
         );
       },
     );
