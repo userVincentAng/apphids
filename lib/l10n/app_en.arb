@@ -1,0 +1,32 @@
+{
+  "@@locale": "en",
+  
+  "appTitle": "AppHIDS",
+  "dashboardTitle": "Dashboard",
+  "pestDetectionTitle": "Pest Detection",
+  "irrigationTitle": "Irrigation Status",
+  
+  "alertTitle": "Alert",
+  "confirmButton": "Confirm",
+  "cancelButton": "Cancel",
+  
+  "pestDetectedMessage": "Pest activity detected in your field!",
+  "irrigationStatusMessage": "Current irrigation status: {status}",
+  "@irrigationStatusMessage": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  
+  "soilMoistureLabel": "Soil Moisture",
+  "temperatureLabel": "Temperature",
+  "humidityLabel": "Humidity",
+  "lightLevelLabel": "Light Level",
+  
+  "settingsTitle": "Settings",
+  "languageSettingLabel": "Language",
+  "themeSettingLabel": "Theme",
+  "notificationSettingLabel": "Notifications"
+} 

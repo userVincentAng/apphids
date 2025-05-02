@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 class PulsatingBugIcon extends StatefulWidget {
-  const PulsatingBugIcon({Key? key}) : super(key: key);
+  const PulsatingBugIcon({super.key});
 
   @override
-  _PulsatingBugIconState createState() => _PulsatingBugIconState();
+  PulsatingBugIconState createState() => PulsatingBugIconState();
 }
 
-class _PulsatingBugIconState extends State<PulsatingBugIcon>
+class PulsatingBugIconState extends State<PulsatingBugIcon>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
@@ -38,10 +38,10 @@ class _PulsatingBugIconState extends State<PulsatingBugIcon>
         scale: _animation.value,
         child: child,
       ),
-      child: const Icon(
-        Icons.bug_report,
-        size: 80,
-        color: Colors.greenAccent,
+      child: Image.asset(
+        'assets/icons/app_icon.png',
+        width: 80,
+        height: 80,
       ),
     );
   }

@@ -28,8 +28,10 @@ class DetectionAlertScreen extends StatelessWidget {
   }
 
   void _showDetails(BuildContext context) {
-    Navigator.push(context, MaterialPageRoute(
-      builder: (_) => const AphidTableScreen(), // Next screen
-    ));
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const AphidTableScreen(), // Next screen
+        ));
   }
 }

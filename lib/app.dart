@@ -1,19 +1,26 @@
 // app.dart
-import 'package:apphids/features/home/screens/dashboard.dart';
 import 'package:flutter/material.dart';
-import 'core/themes/app_theme.dart';
-import 'features/detection/screens/detection_alert.dart';
+import 'config/app_theme.dart';
+import 'config/routes.dart';
+import 'core/services/storage_service.dart';
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class AppHIDS extends StatelessWidget {
+  final StorageService storageService;
+
+  const AppHIDS({
+    super.key,
+    required this.storageService,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'APP-HIDS',
-      theme: AppTheme.darkTheme,
+      title: 'AppHIDS',
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system,
+      routes: AppRoutes.routes,
       debugShowCheckedModeBanner: false,
-      home: DashboardPage(), // Initial screen
     );
   }
 }
