@@ -87,10 +87,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _loadChemigationData() async {
     try {
-      final [level, history] = await Future.wait([
+      final (level, history) = await (
         _databaseService.getChemigationLevels(),
         _databaseService.getChemigationHistory(),
-      ]);
+      ).wait;
       setState(() {
         _latestChemigationLevel = level;
         _chemigationHistory = history;
