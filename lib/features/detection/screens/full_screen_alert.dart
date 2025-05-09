@@ -60,15 +60,6 @@ class _FullScreenAlertState extends State<FullScreenAlert> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Text(
-                    'APP-HIDS',
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
                     'DETECTION ALERT!',
                     style: TextStyle(
                       color: Colors.red,

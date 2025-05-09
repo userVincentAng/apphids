@@ -9,13 +9,25 @@ class DetectionModel {
     required this.status,
   });
 
+  // Static method to calculate status based on aphid count
+  static String calculateStatus(int aphidCount) {
+    if (aphidCount <= 15) {
+      return 'Normal';
+    } else if (aphidCount <= 30) {
+      return 'Moderate';
+    } else {
+      return 'Severe';
+    }
+  }
+
   factory DetectionModel.fromJson(Map<String, dynamic> json) {
     // Combine date and time fields, e.g., "2025-04-30 17:54:10"
     final dateTimeString = "${json['date']} ${json['time']}";
+    final aphidCount = json['numberOfAphids'] as int;
     return DetectionModel(
       date: DateTime.parse(dateTimeString),
-      numberOfAphids: json['numberOfAphids'],
-      status: json['status'],
+      numberOfAphids: aphidCount,
+      status: calculateStatus(aphidCount),
     );
   }
 
@@ -26,4 +38,8 @@ class DetectionModel {
       'status': status,
     };
   }
+
+  // Helper method to get date key for grouping
+  String get dateKey =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }

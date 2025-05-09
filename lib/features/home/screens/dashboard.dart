@@ -1,5 +1,3 @@
-// ignore_for_file: deprecated_member_use
-
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -23,7 +21,8 @@ class _DashboardPageState extends State<DashboardPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final DatabaseService _databaseService = DatabaseService();
   List<DetectionModel> _detections = [];
-  List<ChemigationLevel> _chemigationLevels = [];
+  ChemigationLevel? _latestChemigationLevel;
+  List<ChemigationLevel> _chemigationHistory = [];
   MoistureLevel? _latestMoistureLevel;
   bool _isLoading = true;
   String _error = '';
@@ -32,52 +31,24 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
-    _loadDetectionData();
-    _loadChemigationData();
-    _loadMoistureData();
+    _loadAllData();
     _updateCurrentTime();
+  }
+
+  Future<void> _loadAllData() async {
+    await Future.wait([
+      _loadDetectionData(),
+      _loadChemigationData(),
+      _loadMoistureData(),
+    ]);
   }
 
   void _updateCurrentTime() {
     if (!mounted) return;
     setState(() {
-      _currentTime = DateFormat('hh:mm:ss a').format(DateTime.now());
+      _currentTime = DateFormat('MMMM d, y | hh:mm a').format(DateTime.now());
     });
-    // Update time every second
     Future.delayed(const Duration(seconds: 1), _updateCurrentTime);
-  }
-
-  void _showFullScreenAlert(List<Map<String, dynamic>> alerts) {
-    if (mounted) {
-      Navigator.of(context).push(
-        PageRouteBuilder(
-          opaque: false,
-          pageBuilder: (context, animation, secondaryAnimation) {
-            final totalAphids = alerts.fold<int>(
-              0,
-              (sum, alert) => sum + (alert['count'] as int),
-            );
-
-            return FullScreenAlert(
-              aphidCount: totalAphids,
-              onShowDetails: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const AphidTableScreen(),
-                  ),
-                );
-              },
-            );
-          },
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(
-              opacity: animation,
-              child: child,
-            );
-          },
-        ),
-      );
-    }
   }
 
   Future<void> _loadDetectionData() async {
@@ -87,20 +58,28 @@ class _DashboardPageState extends State<DashboardPage> {
         _error = '';
       });
 
-      final detections = await _databaseService.getDetectionData();
-      final severeAlerts = await _databaseService.getSevereAlerts();
+      final [severeAlerts, dailyData] = await Future.wait([
+        _databaseService.getSevereAlerts(),
+        _databaseService.getDailyDetectionData(),
+      ]);
 
       if (severeAlerts.isNotEmpty && mounted) {
         _showFullScreenAlert(severeAlerts);
       }
 
       setState(() {
-        _detections = detections;
+        _detections = dailyData
+            .map((data) => DetectionModel(
+                  date: data['date'] as DateTime,
+                  numberOfAphids: data['totalAphids'] as int,
+                  status: data['status'] as String,
+                ))
+            .toList();
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _error = 'Failed to load data: $e';
+        _error = 'Failed to load detection data: $e';
         _isLoading = false;
       });
     }
@@ -108,12 +87,16 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<void> _loadChemigationData() async {
     try {
-      final levels = await _databaseService.getChemigationLevels();
+      final [level, history] = await Future.wait([
+        _databaseService.getChemigationLevels(),
+        _databaseService.getChemigationHistory(),
+      ]);
       setState(() {
-        _chemigationLevels = levels;
+        _latestChemigationLevel = level;
+        _chemigationHistory = history;
       });
     } catch (e) {
-      print('Error loading chemigation data: $e');
+      debugPrint('Error loading chemigation data: $e');
     }
   }
 
@@ -124,27 +107,31 @@ class _DashboardPageState extends State<DashboardPage> {
         _latestMoistureLevel = moistureLevel;
       });
     } catch (e) {
-      print('Error loading moisture data: $e');
+      debugPrint('Error loading moisture data: $e');
     }
   }
 
-  void showDetectionAlert(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Detection Alert'),
-          content: const Text('A new pest has been detected!'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('OK'),
+  void _showFullScreenAlert(List<Map<String, dynamic>> alerts) {
+    if (!mounted) return;
+
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        pageBuilder: (context, _, __) {
+          final totalAphids = alerts.fold<int>(
+              0, (sum, alert) => sum + (alert['count'] as int));
+          return FullScreenAlert(
+            aphidCount: totalAphids,
+            onShowDetails: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AphidTableScreen()),
             ),
-          ],
-        );
-      },
+          );
+        },
+        transitionsBuilder: (context, animation, _, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
     );
   }
 
@@ -158,8 +145,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final bool isDesktop = constraints.maxWidth > 600;
-
+        final isDesktop = constraints.maxWidth > 600;
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: const Color(0xFF1E1E1E),
@@ -170,27 +156,21 @@ class _DashboardPageState extends State<DashboardPage> {
               children: [
                 Icon(Icons.bug_report, color: Colors.green),
                 SizedBox(width: 10),
-                Text(
-                  'APP-HIDS',
-                  style: TextStyle(
-                      color: Colors.green, fontWeight: FontWeight.bold),
-                ),
+                Text('APP-HIDS',
+                    style: TextStyle(
+                        color: Colors.green, fontWeight: FontWeight.bold)),
               ],
             ),
             leading: isDesktop
                 ? null
                 : IconButton(
                     icon: const Icon(Icons.menu, color: Colors.green),
-                    onPressed: () {
-                      _scaffoldKey.currentState?.openDrawer();
-                    },
+                    onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                   ),
             actions: [
               if (isDesktop) ...[
                 _buildNavItem(Icons.dashboard, 'Dashboard', isSelected: true),
                 _buildNavItem(Icons.bug_report, 'Pest Detection'),
-                _buildNavItem(Icons.water_drop, 'Irrigation'),
-                _buildNavItem(Icons.track_changes, 'Monitoring'),
                 _buildNavItem(Icons.history, 'History'),
                 _buildNavItem(Icons.settings, 'Settings'),
               ],
@@ -201,7 +181,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               IconButton(
                 icon: const Icon(Icons.refresh, color: Colors.green),
-                onPressed: _loadDetectionData,
+                onPressed: _loadAllData,
                 tooltip: 'Reload Data',
               ),
             ],
@@ -225,9 +205,7 @@ class _DashboardPageState extends State<DashboardPage> {
         padding: EdgeInsets.zero,
         children: [
           const DrawerHeader(
-            decoration: BoxDecoration(
-              color: Color(0xFF1E1E1E),
-            ),
+            decoration: BoxDecoration(color: Color(0xFF1E1E1E)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -237,26 +215,19 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: Icon(Icons.person, size: 30, color: Colors.white),
                 ),
                 SizedBox(height: 10),
-                Text(
-                  'Administrator',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                Text('Administrator',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold)),
                 SizedBox(height: 4),
-                Text(
-                  'Farm Management',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
+                Text('Farm Management',
+                    style: TextStyle(color: Colors.grey, fontSize: 12)),
               ],
             ),
           ),
           _buildNavItem(Icons.dashboard, 'Dashboard', isSelected: true),
           _buildNavItem(Icons.bug_report, 'Pest Detection'),
-          _buildNavItem(Icons.water_drop, 'Irrigation'),
-          _buildNavItem(Icons.track_changes, 'Monitoring'),
           _buildNavItem(Icons.history, 'History'),
           _buildNavItem(Icons.settings, 'Settings'),
           const Divider(color: Colors.grey),
@@ -267,116 +238,72 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildNavItem(IconData icon, String title, {bool isSelected = false}) {
-    if (MediaQuery.of(context).size.width > 600) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-        child: TextButton.icon(
-          icon: Icon(icon, color: isSelected ? Colors.green : Colors.grey),
-          label: Text(
-            title,
-            style: TextStyle(
-              color: isSelected ? Colors.green : Colors.white70,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+    final isWide = MediaQuery.of(context).size.width > 600;
+
+    return isWide
+        ? Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: TextButton.icon(
+              icon: Icon(icon, color: isSelected ? Colors.green : Colors.grey),
+              label: Text(title,
+                  style: TextStyle(
+                    color: isSelected ? Colors.green : Colors.white70,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                  )),
+              onPressed: () {},
             ),
-          ),
-          onPressed: () {
-            // Navigation logic would go here
-          },
-        ),
-      );
-    } else {
-      return ListTile(
-        leading: Icon(icon, color: isSelected ? Colors.green : Colors.grey),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: isSelected ? Colors.green : Colors.white70,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 14,
-          ),
-        ),
-        selected: isSelected,
-        selectedTileColor: Colors.green.withOpacity(0.1),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-        onTap: () {
-          // Navigation logic would go here
-          Navigator.pop(context); // Close drawer after selection
-        },
-      );
-    }
+          )
+        : ListTile(
+            leading: Icon(icon, color: isSelected ? Colors.green : Colors.grey),
+            title: Text(title,
+                style: TextStyle(
+                  color: isSelected ? Colors.green : Colors.white70,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 14,
+                )),
+            selected: isSelected,
+            selectedTileColor: Colors.green.withOpacity(0.1),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            onTap: () => Navigator.pop(context),
+          );
   }
 
   Widget _buildDashboardContent() {
     final now = DateTime.now();
-
-    // Group detections by date and get the latest for each day
-    final Map<String, DetectionModel> latestDetectionsByDay = {};
-    for (var detection in _detections) {
-      final dateKey = DateFormat('yyyy-MM-dd').format(detection.date);
-      if (!latestDetectionsByDay.containsKey(dateKey) ||
-          detection.date.isAfter(latestDetectionsByDay[dateKey]!.date)) {
-        latestDetectionsByDay[dateKey] = detection;
-      }
-    }
-
-    // Get this month's detections
-    final thisMonthDetections = latestDetectionsByDay.values
-        .where((detection) =>
-            detection.date.year == now.year &&
-            detection.date.month == now.month)
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date)); // Sort by date descending
-
+    final thisMonthData = _detections
+        .where((d) => d.date.year == now.year && d.date.month == now.month)
+        .toList();
     final latestDetection =
-        thisMonthDetections.isNotEmpty ? thisMonthDetections.first : null;
-    double chemigationLevel = 10.0;
+        thisMonthData.isNotEmpty ? thisMonthData.first : null;
+    final chemigationLevel = _latestChemigationLevel?.level.toDouble() ?? 10.0;
 
-    if (latestDetection != null) {
-      switch (latestDetection.status.toLowerCase()) {
-        case 'severe':
-          chemigationLevel = 60.0;
-          break;
-        case 'moderate':
-          chemigationLevel = 30.0;
-          break;
-        case 'normal':
-        default:
-          chemigationLevel = 10.0;
-          break;
-      }
-    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWideScreen = constraints.maxWidth > 600;
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1200),
-        child: Column(
+        final dateTimeHeader = Padding(
+          padding: const EdgeInsets.only(bottom: 24.0),
+          child: Center(
+            child: Text(
+              _currentTime,
+              style: const TextStyle(
+                fontSize: 20,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+
+        final chemigationGauge = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Chemigation Level",
-                    style: TextStyle(fontSize: 16, color: Colors.white)),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF252525),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _currentTime,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
+            const Text("Chemigation Level",
+                style: TextStyle(fontSize: 16, color: Colors.white)),
+            const SizedBox(height: 16),
             SfRadialGauge(
               axes: [
                 RadialAxis(
@@ -404,9 +331,10 @@ class _DashboardPageState extends State<DashboardPage> {
                       widget: Text(
                         '${chemigationLevel.toStringAsFixed(0)}%',
                         style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white),
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                       angle: 90,
                       positionFactor: 0.1,
@@ -415,148 +343,215 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                    child: StatCard(
-                        title: "Aphids Detected",
-                        value: thisMonthDetections.isNotEmpty
-                            ? "${thisMonthDetections.first.numberOfAphids} aphids"
-                            : "No data",
-                        time: thisMonthDetections.isNotEmpty
-                            ? _getTimeAgo(thisMonthDetections.first.date)
-                            : "No data")),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: StatCard(
-                        title: "Moisture Level",
-                        value: _latestMoistureLevel != null
-                            ? "${_latestMoistureLevel!.level}%"
-                            : "No data",
-                        time: _latestMoistureLevel != null
-                            ? _getTimeAgo(_latestMoistureLevel!.date)
-                            : "No data")),
-              ],
-            ),
-            const SizedBox(height: 30),
-            const Text(
-              "Chemigation Trend",
-              style: TextStyle(
-                color: Color(0xFFB5FF70),
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+          ],
+        );
+
+        final statCards = Row(
+          children: [
+            Expanded(
+              child: StatCard(
+                title: "Aphids Detected",
+                value: latestDetection != null
+                    ? "${latestDetection.numberOfAphids} aphids"
+                    : "No data",
+                time: latestDetection != null
+                    ? _getTimeAgo(latestDetection.date)
+                    : "No data",
               ),
             ),
-            const SizedBox(height: 10),
-            _buildChemigationTrend(),
-            const SizedBox(height: 30),
-            const Text(
-              "APHIDS DETECTED",
-              style: TextStyle(
-                color: Color(0xFFB5FF70),
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+            const SizedBox(width: 16),
+            Expanded(
+              child: StatCard(
+                title: "Moisture Level",
+                value: _latestMoistureLevel != null
+                    ? "${_latestMoistureLevel!.level}%"
+                    : "No data",
+                time: _latestMoistureLevel != null
+                    ? _getTimeAgo(_latestMoistureLevel!.date)
+                    : "No data",
               ),
             ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2E2E2E),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error.isNotEmpty
-                      ? Center(
-                          child: Text(_error,
-                              style: const TextStyle(color: Colors.red)))
-                      : thisMonthDetections.isEmpty
-                          ? const Center(
-                              child: Text(
-                                "There are no aphids detected currently",
+          ],
+        );
+
+        final aphidTable = Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2E2E2E),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _error.isNotEmpty
+                  ? Center(
+                      child: Text(_error,
+                          style: const TextStyle(color: Colors.red)))
+                  : thisMonthData.isEmpty
+                      ? const Center(
+                          child: Text(
+                            "There are no aphids detected currently",
+                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            const Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                Expanded(child: TableText("Date", bold: true)),
+                                Expanded(
+                                    child: TableText("No. Aphids", bold: true)),
+                                Expanded(
+                                    child: TableText("Status", bold: true)),
+                              ],
+                            ),
+                            const Divider(color: Colors.grey),
+                            ...thisMonthData.map((d) => Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8.0),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                          child: TableText(DateFormat('MMMM d')
+                                              .format(d.date))),
+                                      Expanded(
+                                          child: TableText(
+                                              d.numberOfAphids.toString())),
+                                      Expanded(
+                                          child: TableText(
+                                        d.status,
+                                        style: TextStyle(
+                                          color:
+                                              d.status.toLowerCase() == 'severe'
+                                                  ? Colors.red
+                                                  : d.status.toLowerCase() ==
+                                                          'moderate'
+                                                      ? Colors.orange
+                                                      : Colors.green,
+                                        ),
+                                      )),
+                                    ],
+                                  ),
+                                )),
+                          ],
+                        ),
+        );
+
+        if (isWideScreen) {
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1200),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 32.0, horizontal: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    dateTimeHeader,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left column
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              chemigationGauge,
+                              const SizedBox(height: 24),
+                              statCards,
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 32),
+                        // Right column
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Chemigation Trend",
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: Color(0xFFB5FF70),
+                                  fontWeight: FontWeight.bold,
                                   fontSize: 16,
                                 ),
                               ),
-                            )
-                          : Column(
-                              children: [
-                                const Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceAround,
-                                  children: [
-                                    Expanded(
-                                        child: TableText("Date", bold: true)),
-                                    Expanded(
-                                        child: TableText("Time", bold: true)),
-                                    Expanded(
-                                        child: TableText("No. Aphids",
-                                            bold: true)),
-                                    Expanded(
-                                        child: TableText("Status", bold: true)),
-                                  ],
+                              const SizedBox(height: 10),
+                              _buildChemigationTrend(),
+                              const SizedBox(height: 30),
+                              const Text(
+                                "APHIDS DETECTED",
+                                style: TextStyle(
+                                  color: Color(0xFFB5FF70),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
                                 ),
-                                const Divider(color: Colors.grey),
-                                ...thisMonthDetections.map((detection) =>
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 8.0),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                              child: TableText(
-                                                  DateFormat('MMMM d')
-                                                      .format(detection.date))),
-                                          Expanded(
-                                              child: TableText(
-                                                  DateFormat('HH:mm:ss')
-                                                      .format(detection.date))),
-                                          Expanded(
-                                              child: TableText(detection
-                                                  .numberOfAphids
-                                                  .toString())),
-                                          Expanded(
-                                              child: TableText(
-                                            detection.status,
-                                            style: TextStyle(
-                                              color: detection.status
-                                                          .toLowerCase() ==
-                                                      'detected'
-                                                  ? Colors.red
-                                                  : Colors.green,
-                                            ),
-                                          )),
-                                        ],
-                                      ),
-                                    )),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(height: 10),
+                              aphidTable,
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
-        ),
-      ),
+          );
+        } else {
+          return SingleChildScrollView(
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 24.0, horizontal: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  dateTimeHeader,
+                  const Text("Chemigation Level",
+                      style: TextStyle(fontSize: 16, color: Colors.white)),
+                  const SizedBox(height: 16),
+                  chemigationGauge,
+                  const SizedBox(height: 24),
+                  statCards,
+                  const SizedBox(height: 30),
+                  const Text(
+                    "Chemigation Trend",
+                    style: TextStyle(
+                        color: Color(0xFFB5FF70),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildChemigationTrend(),
+                  const SizedBox(height: 30),
+                  const Text(
+                    "APHIDS DETECTED",
+                    style: TextStyle(
+                        color: Color(0xFFB5FF70),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16),
+                  ),
+                  const SizedBox(height: 10),
+                  aphidTable,
+                ],
+              ),
+            ),
+          );
+        }
+      },
     );
   }
 
   Widget _buildChemigationTrend() {
-    if (_chemigationLevels.isEmpty) {
+    if (_chemigationHistory.isEmpty) {
       return const Center(
-        child: Text(
-          'No chemigation data available',
-          style: TextStyle(color: Colors.white),
-        ),
+        child: Text('No chemigation data available',
+            style: TextStyle(color: Colors.white)),
       );
     }
-
-    // Get the last 7 days of data
-    final lastSevenDays = _chemigationLevels
-        .take(7)
-        .toList()
-        .reversed
-        .toList(); // Reverse to show oldest to newest
 
     return SizedBox(
       height: 220,
@@ -584,16 +579,14 @@ class _DashboardPageState extends State<DashboardPage> {
                   interval: 1,
                   getTitlesWidget: (value, _) {
                     if (value.toInt() >= 0 &&
-                        value.toInt() < lastSevenDays.length) {
-                      final date = lastSevenDays[value.toInt()].date;
+                        value.toInt() < _chemigationHistory.length) {
                       return Padding(
                         padding: const EdgeInsets.only(top: 8.0),
                         child: Text(
-                          DateFormat('MMM d').format(date),
+                          DateFormat('MMM d')
+                              .format(_chemigationHistory[value.toInt()].date),
                           style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.white,
-                          ),
+                              fontSize: 10, color: Colors.white),
                         ),
                       );
                     }
@@ -606,31 +599,26 @@ class _DashboardPageState extends State<DashboardPage> {
                   showTitles: true,
                   interval: 20,
                   reservedSize: 30,
-                  getTitlesWidget: (value, _) {
-                    return Text(
-                      value.toInt().toString(),
-                      style: const TextStyle(fontSize: 10, color: Colors.white),
-                    );
-                  },
+                  getTitlesWidget: (value, _) => Text(
+                    value.toInt().toString(),
+                    style: const TextStyle(fontSize: 10, color: Colors.white),
+                  ),
                 ),
               ),
-              topTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-              rightTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
+              topTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             ),
             borderData: FlBorderData(show: false),
             lineBarsData: [
               LineChartBarData(
-                spots: List.generate(
-                  lastSevenDays.length,
-                  (index) => FlSpot(
-                    index.toDouble(),
-                    lastSevenDays[index].level.toDouble(),
-                  ),
-                ),
+                spots: _chemigationHistory
+                    .asMap()
+                    .entries
+                    .map((e) =>
+                        FlSpot(e.key.toDouble(), e.value.level.toDouble()))
+                    .toList(),
                 isCurved: true,
                 color: Colors.green,
                 barWidth: 2,
@@ -652,25 +640,16 @@ class _DashboardPageState extends State<DashboardPage> {
     final localDate = date.toLocal();
     final difference = now.difference(localDate);
 
-    // If it's the same day, just show the hours and minutes
     if (now.year == localDate.year &&
         now.month == localDate.month &&
         now.day == localDate.day) {
       final hours = difference.inHours;
       final minutes = difference.inMinutes % 60;
-
-      if (hours > 0) {
-        return "$hours hours $minutes minutes ago";
-      } else if (minutes > 0) {
-        return "$minutes minutes ago";
-      } else {
-        return "Just now";
-      }
-    } else {
-      // If it's a different day
-      final days = difference.inDays;
-      return "$days days ago";
+      if (hours > 0) return "$hours hours $minutes minutes ago";
+      if (minutes > 0) return "$minutes minutes ago";
+      return "Just now";
     }
+    return "${difference.inDays} days ago";
   }
 }
 

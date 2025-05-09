@@ -58,6 +58,21 @@ class LoginPageState extends State<LoginPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
+                    'APPHIDS',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.lightGreenAccent,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const Image(
+                    image: AssetImage('assets/icons/app_icon.png'),
+                    width: 150,
+                    height: 150,
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
                     'Welcome Back',
                     style: TextStyle(
                       fontSize: 24,

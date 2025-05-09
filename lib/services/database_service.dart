@@ -39,7 +39,7 @@ class DatabaseService {
     }
   }
 
-  Future<List<ChemigationLevel>> getChemigationLevels() async {
+  Future<ChemigationLevel> getChemigationLevels() async {
     try {
       final response = await http.get(
         Uri.parse('${AppConstants.baseUrl}/chemigation'),
@@ -50,7 +50,15 @@ class DatabaseService {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => ChemigationLevel.fromJson(json)).toList();
+        if (data.isEmpty) {
+          throw Exception('No chemigation data available');
+        }
+        // Sort by date descending and return the latest entry
+        final sortedData = data
+            .map((json) => ChemigationLevel.fromJson(json))
+            .toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
+        return sortedData.first;
       } else {
         throw Exception(
             'Failed to fetch chemigation data: ${response.statusCode}');
@@ -61,24 +69,29 @@ class DatabaseService {
     }
   }
 
-  Future<ChemigationLevel> postChemigationLevel(ChemigationLevel level) async {
+  Future<List<ChemigationLevel>> getChemigationHistory() async {
     try {
-      final response = await http.post(
+      final response = await http.get(
         Uri.parse('${AppConstants.baseUrl}/chemigation'),
         headers: {
           'Content-Type': 'application/json',
         },
-        body: json.encode(level.toJson()),
       );
 
-      if (response.statusCode == 201) {
-        return ChemigationLevel.fromJson(json.decode(response.body));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        if (data.isEmpty) {
+          throw Exception('No chemigation data available');
+        }
+        // Sort by date ascending to show from first to latest
+        return data.map((json) => ChemigationLevel.fromJson(json)).toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
       } else {
         throw Exception(
-            'Failed to post chemigation data: ${response.statusCode}');
+            'Failed to fetch chemigation history: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error posting chemigation data: $e');
+      print('Error fetching chemigation history: $e');
       rethrow;
     }
   }
@@ -123,6 +136,40 @@ class DatabaseService {
       }
     } catch (e) {
       print('Error fetching severe alerts: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getDailyDetectionData() async {
+    try {
+      final detections = await getDetectionData();
+
+      // Group detections by date
+      final Map<String, Map<String, dynamic>> dailyTotals = {};
+
+      for (var detection in detections) {
+        final dateKey = detection.dateKey;
+        if (!dailyTotals.containsKey(dateKey)) {
+          dailyTotals[dateKey] = {
+            'date': detection.date,
+            'totalAphids': 0,
+            'status': 'Normal'
+          };
+        }
+
+        dailyTotals[dateKey]!['totalAphids'] += detection.numberOfAphids;
+        dailyTotals[dateKey]!['status'] = DetectionModel.calculateStatus(
+            dailyTotals[dateKey]!['totalAphids'] as int);
+      }
+
+      // Convert to list and sort by date descending
+      final dailyData = dailyTotals.values.toList()
+        ..sort(
+            (a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+
+      return dailyData;
+    } catch (e) {
+      print('Error getting daily detection data: $e');
       rethrow;
     }
   }
